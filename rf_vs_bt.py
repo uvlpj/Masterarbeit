@@ -101,72 +101,8 @@ def crps_sample(y, dat, w, return_mean=True):
         return score_arr.mean()
 
     return score_arr
-
-
-
-def calculate_individual_crps(y_test, dat_test, weights_test):
-
-    individual_crps = crps_sample(y_test, dat_test, weights_test, return_mean=False)
-    print('shape crps_values ', individual_crps.shape)
-    
-    
-    return individual_crps
         
 
-def calculate_individual_se(y_test, y_pred):
-
-    individual_se = se(y_test, y_pred)
-    print('shape se_values ', individual_se.shape)
-    
-    return individual_se
-
-#%%
-
-def save_results(individual_crps_arr, individual_se_arr, dat_test, prefix="res/"):
-    '''
-    Funktion um die Ergebnisse von sklearn zu speichern
-    
-    Output: CSV-Dateien, die die CRPS- sowie die SE-Werte für jeden Datenpunkt im Testdatensatz enthalten.
-    '''
-    os.makedirs(prefix, exist_ok=True)  # Erstelle das Verzeichnis, falls es nicht existiert
-    
-    for i, result in enumerate(individual_crps_arr):
-        # Dynamischer Dateiname basierend auf den Parametern (time_trend, day_of_year)
-        time_trend_part = 'tt' if result['time_trend'] == 'yes' else 'nott'
-        day_part = 'doy' if result['day_of_year'] == 'yes' else 'month'
-        lag_part = 'lagged' if result['load_lag1'] == 'yes' else 'notlagged'
-        
-        # Speichern für Random Forest
-        save_name_rf = f"{prefix}sklearn_{time_trend_part}_{day_part}_{lag_part}_rf.csv"
-        # Speichern für Bagged Trees
-        save_name_bt = f"{prefix}sklearn_{time_trend_part}_{day_part}_{lag_part}_bt.csv"
-
-        # Erstelle einen DataFrame für Random Forest
-        df_rf = pd.DataFrame({
-            'date_time': dat_test.index, 
-            'crps': result['CRPS_RF'],  # Individuelle CRPS-Werte für RF
-            'se': se_arr[i]['SE_RF'],    # Individuelle SE-Werte für RF
-        })
-        
-        # Erstelle einen DataFrame für Bagged Trees
-        df_bt = pd.DataFrame({
-            'date_time': dat_test.index, 
-            'crps': result['CRPS_BT'],  # Individuelle CRPS-Werte für BT
-            'se': se_arr[i]['SE_BT'],    # Individuelle SE-Werte für BT
-        })
-        
-        # Speichern der Ergebnisse als CSV-Datei mit Index
-        df_rf.to_csv(save_name_rf, index=False)  # Index wird mitgespeichert
-        df_bt.to_csv(save_name_bt, index=False)  # Index wird mitgespeichert
-        
-        print(f"Saved: {save_name_rf}")
-        print(f"Saved: {save_name_bt}")
-
-
-
-#%%
-output_folder = r"/home/siefert/projects/Masterarbeit/sophia_code/python_res"
-os.makedirs(output_folder, exist_ok=True)
 #%%
 winter_time = ['2018-10-28 02:00:00',
                '2019-10-27 02:00:00',
@@ -175,14 +111,12 @@ winter_time = ['2018-10-28 02:00:00',
                '2022-10-30 02:00:00',
                '2023-10-29 02:00:00']
 
-df_orig = load_energy('/home/siefert/projects/Masterarbeit/Data/rf_data_1823_clean.csv')
+df_orig = load_energy('/Users/sophiasiefert/Documents/Vorlesungen /Master/Masterarbeit/Data/rf_data_1823_clean.csv')
 
 # remove samples with 0 load. these arise due to daylight saving
 df_orig = df_orig[df_orig.load > 0]
 df_orig = df_orig[df_orig.load < 82000]
 df_orig = df_orig[~df_orig.date_time.isin(winter_time)]
-
-df_orig['load_lag1'] = df_orig['load'].shift(1)
 
 data_encoding = dict(time_trend=False,
                      time_trend_sq=False,
@@ -192,37 +126,19 @@ data_encoding = dict(time_trend=False,
                      last_obs=False)
     
 base_fml = ['hour_int', 'weekday_int', 'holiday']
-#base_fml = ['hour_int', 'weekday_int', 'holiday', 'load_lag1']
-
 
 fmls = []
-fmls.append(base_fml + ['month_int']) # without timetrend
-fmls.append(base_fml + ['yearday']) # without timetrend
+fmls.append(base_fml + ['month_int'])
+fmls.append(base_fml + ['yearday'])
 fmls.append(base_fml + ['time_trend', 'month_int'])
 fmls.append(base_fml + ['time_trend', 'yearday'])
-fmls.append(base_fml + ['month_int', 'load_lag1']) 
-fmls.append(base_fml + ['yearday', 'load_lag1']) 
-fmls.append(base_fml + ['time_trend', 'month_int', 'load_lag1'])
-fmls.append(base_fml + ['time_trend', 'yearday', 'load_lag1'])
-
 #%%
-#N_TREES = 1000
-N_TREES = 100 # Default value of sklearn
+N_TREES = 1000
 
 crps_arr = []
-se_arr = []
-mse_arr = []
-mae_arr = []
-individual_crps_arr = []
-individual_se_arr = []
-
-
-
-df_orig.dropna(inplace=True)
 
 for fml in fmls:
     print(fml)
-    print(f"Verwendete Formel: {fml}")
 
     df, _, _ = prep_energy(df=df_orig, **data_encoding)
     
@@ -264,9 +180,6 @@ for fml in fmls:
         X_test2 = dat_test2[fml]
     
     MTRY_RF = int(len(fml) / 3)
-    print('Number of features p: ', len(fml))
-    print('mtry BT = p: ', len(fml))
-    print('mtry RF = p/3 :',  MTRY_RF)
 
     # keep this in the loop so each config gets same seed
     hyperparams = dict(n_estimators=N_TREES,
@@ -288,183 +201,16 @@ for fml in fmls:
     
     _, w_hat_rf = rf.weight_predict(X_test)
     _, w_hat_bt = bt.weight_predict(X_test)
-
-
-    y_pred_rf = rf.predict(X_test)
-    y_pred_bt = bt.predict(X_test)
-
-
-    # CRPS ---
+    
     crps_rf = crps_sample(y_test, y_train, w_hat_rf)
     crps_bt = crps_sample(y_test, y_train, w_hat_bt)
     
     crps_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
                      'day_of_year': 'yes' if 'yearday' in fml else 'no',
-                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
                      'CRPS_RF': crps_rf, 'CRPS_BT': crps_bt})
-    
-
-    # Individual CRPS ---
-    individual_crps_rf = calculate_individual_crps(y_test, y_train, w_hat_rf)
-    individual_crps_bt = calculate_individual_crps(y_test, y_train, w_hat_bt)
-    print('Shape individual CRPS RF', individual_crps_rf.shape)
-    print('Shape individual CRPS BT', individual_crps_bt.shape)
-    
-
-    #for i in range(len(cumulative_crps_rf)):
-    individual_crps_arr.append({
-            'time_trend': 'yes' if 'time_trend' in fml else 'no',
-            'day_of_year': 'yes' if 'yearday' in fml else 'no',
-            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
-            'CRPS_RF': individual_crps_rf,#[i],  
-            'CRPS_BT': individual_crps_bt,#[i], 
-            'date_time': dat_test.index,#[i]    
-        })
-
-    
-    # SE ---
-    se_rf = se(y_test, y_pred_rf)
-    se_bt = se(y_test, y_pred_bt)
-
-    se_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
-                     'day_of_year': 'yes' if 'yearday' in fml else 'no',
-                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
-                     'SE_RF': se_rf, 'SE_BT': se_bt})
-    
-    
-    # individual SE ---
-    individual_se_rf = calculate_individual_se(y_test, y_pred_rf)
-    individual_se_bt = calculate_individual_se(y_test, y_pred_bt)
-    print('Shape individual SE RF', individual_se_rf.shape)
-    print('Shape individual SE BT', individual_se_bt.shape)
-
-    
-    individual_se_arr.append({
-            'time_trend': 'yes' if 'time_trend' in fml else 'no',
-            'day_of_year': 'yes' if 'yearday' in fml else 'no',
-            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
-            'SE_RF': individual_se_rf,
-            'SE_BT': individual_se_bt,
-            'date_time': dat_test.index,
-            })
-    
-
-    # MSE ---
-    mse_rf = mse(y_test, y_pred_rf)
-    mse_bt = mse(y_test, y_pred_bt)
-    print('MSE RF', mse_rf)
-    print('MSE BT', mse_bt)
-
-    mse_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
-                     'day_of_year': 'yes' if 'yearday' in fml else 'no',
-                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
-                     'MSE_RF': mse_rf, 'MSE_BT': mse_bt})
-
-
-
-    # MAE ---
-    mae_rf = mae(y_test, y_pred_rf)
-    mae_bt = mae(y_test, y_pred_bt)
-
-    mae_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
-                     'day_of_year': 'yes' if 'yearday' in fml else 'no',
-                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
-                     'MAE_RF': mae_rf, 'MAE_BT': mae_bt})
-
 #%%
-# CRPS ---
 df_crps = pd.DataFrame(crps_arr)
 df_crps
-#%%
-# Individual CRPS ---
-df_individual_crps = pd.DataFrame(individual_crps_arr)
-df_individual_crps
-#%%
-# Individual SE --
-df_se = pd.DataFrame(se_arr)
-df_se
-#%%
-df_individual_se_arr = pd.DataFrame(individual_se_arr)
-df_individual_se_arr
-#%%
-# MSE ---
-df_mse = pd.DataFrame(mse_arr)
-df_mse
-#%%
-# MAE ---
-df_mae = pd.DataFrame(mae_arr)
-df_mae
-
-#%%
-save_results(individual_crps_arr, individual_se_arr ,dat_test ,prefix="res/")
-
-
-#%%
-# Plot CRPS ---
-plt.style.use('seaborn-whitegrid')
-plt.rcParams['text.usetex'] = False
-plt.figure(figsize=(12, 8))
-
-for result in cumulative_crps_arr:
-    label_rf = f"RF - Time Trend: {result['time_trend']}, day_of_year: {result['day_of_year']}"
-    label_bt = f"BT - Time Trend: {result['time_trend']}, day_of_year: {result['day_of_year']}"
-
-    result['date_time'] = pd.to_datetime(result['date_time'])
-    # Plot für Random Forest
-    plt.plot(result['date_time'], result['CRPS_RF'], label=label_rf)
-    
-    # Plot für Bagging Trees
-    plt.plot(result['date_time'], result['CRPS_BT'], label=label_bt, linestyle='--')
-
-# Plot-Details
-plt.title('Cumulative CRPS for sklearn', fontsize=18)
-plt.xlabel('Date', fontsize=14)
-plt.ylabel('Cumulative CRPS', fontsize=14)
-plt.xticks(rotation=45, fontsize=12)
-plt.yticks(fontsize=12)
-plt.grid(True)
-plt.legend(fontsize=10, loc='upper left')
-plt.tight_layout()
-
-# Plot anzeigen
-plt.show()
-
-#%%
-
-# Plot SE ---
-plt.style.use('seaborn-whitegrid')
-plt.rcParams['text.usetex'] = False
-plt.figure(figsize=(12, 8))
-
-for result in cumulative_se_arr:
-    label_rf = f"RF - Time Trend: {result['time_trend']}, day_of_year: {result['day_of_year']}"
-    label_bt = f"BT - Time Trend: {result['time_trend']}, day_of_year: {result['day_of_year']}"
-    print(f"Date Time shape: {result['date_time'].shape}")
-    print(f"SE_RF shape: {result['SE_RF'].shape}")
-    print(f"SE_BT shape: {result['SE_BT'].shape}")
-
-    result['date_time'] = pd.to_datetime(result['date_time'])
-
-
-    # Plot für Random Forest
-    plt.plot(result['date_time'], result['SE_RF'], label=label_rf)
-    
-    # Plot für Bagging Trees
-    plt.plot(result['date_time'], result['SE_BT'], label=label_bt, linestyle='--')
-
-# Plot-Details
-plt.title('Cumulative SE for sklearn', fontsize=18)
-plt.xlabel('Date', fontsize=14)
-plt.ylabel('Cumulative SE', fontsize=14)
-plt.xticks(rotation=45, fontsize=12)
-plt.yticks(fontsize=12)
-plt.grid(True)
-plt.legend(fontsize=10, loc='upper left')
-plt.tight_layout()
-
-# Plot anzeigen
-plt.show()
-
 #%%
 PLOT = False
 
