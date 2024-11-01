@@ -11,14 +11,14 @@ set.seed(2024)
 # set working directory
 setwd("/Users/sophiasiefert/Documents/Vorlesungen /Master/Masterarbeit/R_code")
 
-if (!dir.exists("res_lagged_no_Intercept_Hyperpara_const")) {
-  dir.create("res_lagged_no_Intercept_Hyperpara_const")
+if (!dir.exists("res_lagged_Intercept_Hyperpara_const")) {
+  dir.create("res_lagged_Intercept_Hyperpara_const")
 }
 
 
 # which implementation to use? 
 which_package <- "ranger" # "ranger" or "quantregForest"
-bagged_trees <- FALSE # if true, use bagged trees (without subsampling regressors)
+bagged_trees <- TRUE # if true, use bagged trees (without subsampling regressors)
 
 # read training data
 dat <- read.csv("/Users/sophiasiefert/Documents/Vorlesungen /Master/Masterarbeit/Data/rf_data_1823_clean.csv") %>%
@@ -56,6 +56,7 @@ dim(dat_test)
 # settings for random forest ---
 time_trend <- TRUE # if false, omit time trend
 day_of_year <- FALSE # if false, use sparser (monthly) coding
+load_lag1 <- FALSE # if false, omit the lagged variable
 
 # Number of quantiles to be used
 n_quantiles <- 1e2
@@ -64,7 +65,7 @@ n_quantiles <- 1e2
 grid_quantiles <- (2*(1:n_quantiles)-1)/(2*n_quantiles)
 
 # construct formula
-fml <- as.formula("load ~ holiday + hour_int + weekday_int + load_lag1")
+fml <- as.formula("load ~ holiday + hour_int + weekday_int")
 
 
 if (day_of_year){
@@ -74,6 +75,9 @@ if (day_of_year){
 }
 if (time_trend){
   fml <- update(fml, . ~ . + time_trend)
+}
+if(load_lag1){
+  fml <- update(fml, . ~ . + load_lag1 )
 }
 
 # Ausgabe der verwendeten Variablen
@@ -99,14 +103,14 @@ if (which_package == "ranger"){
                   quantiles = grid_quantiles, 
                   data = dat_test)$predictions
 } else {
-  fml_no_intercept <- update(fml, . ~ . - 1)
+  #fml_no_intercept <- update(fml, . ~ . - 1)
   
-  x_train <- model.matrix(fml_no_intercept, data = dat_train) %>%
+  x_train <- model.matrix(fml, data = dat_train) %>%
     as.matrix
-  x_test <- model.matrix(fml_no_intercept, data = data.frame(load = y_test, 
+  x_test <- model.matrix(fml, data = data.frame(load = y_test, 
                                                 dat_test)) %>%
     as.matrix
-  cat("x_train Matrix ohne Intercept:\n")
+  cat("x_train Matrix with Intercept:\n")
   print(head(x_train))
   
   # check
@@ -141,7 +145,7 @@ res %>% group_by(year) %>%
   kable(digits = 1)
 
 # save results in subfolder "res/"
-save_name <- paste0("res_lagged_no_Intercept_Hyperpara_const/", which_package, "_")
+save_name <- paste0("res_lagged_Intercept_Hyperpara_const/", which_package, "_")
 if (time_trend){
   save_name <- paste0(save_name, "tt_")
 } else {
@@ -151,6 +155,11 @@ if (day_of_year){
   save_name <- paste0(save_name, "day_")
 } else {
   save_name <- paste0(save_name, "month_")
+}
+if (load_lag1){
+  save_name <- paste0(save_name, "lagged_")
+} else {
+  save_name <- paste0(save_name, "notlagged_")
 }
 if (bagged_trees){
   save_name <- paste0(save_name, "bt.csv")
