@@ -134,11 +134,12 @@ def save_results(individual_crps_arr, individual_se_arr, dat_test, prefix="res/"
         # Dynamischer Dateiname basierend auf den Parametern (time_trend, day_of_year)
         time_trend_part = 'tt' if result['time_trend'] == 'yes' else 'nott'
         day_part = 'doy' if result['day_of_year'] == 'yes' else 'month'
+        lag_part = 'lagged' if result['load_lag1'] == 'yes' else 'notlagged'
         
         # Speichern für Random Forest
-        save_name_rf = f"{prefix}sklearn_{time_trend_part}_{day_part}_rf.csv"
+        save_name_rf = f"{prefix}sklearn_{time_trend_part}_{day_part}_{lag_part}_rf.csv"
         # Speichern für Bagged Trees
-        save_name_bt = f"{prefix}sklearn_{time_trend_part}_{day_part}_bt.csv"
+        save_name_bt = f"{prefix}sklearn_{time_trend_part}_{day_part}_{lag_part}_bt.csv"
 
         # Erstelle einen DataFrame für Random Forest
         df_rf = pd.DataFrame({
@@ -190,17 +191,23 @@ data_encoding = dict(time_trend=False,
                      sin_cos_features=False,
                      last_obs=False)
     
-#base_fml = ['hour_int', 'weekday_int', 'holiday']
-base_fml = ['hour_int', 'weekday_int', 'holiday', 'load_lag1']
+base_fml = ['hour_int', 'weekday_int', 'holiday']
+#base_fml = ['hour_int', 'weekday_int', 'holiday', 'load_lag1']
+
 
 fmls = []
-fmls.append(base_fml + ['month_int'])
-fmls.append(base_fml + ['yearday'])
+fmls.append(base_fml + ['month_int']) # without timetrend
+fmls.append(base_fml + ['yearday']) # without timetrend
 fmls.append(base_fml + ['time_trend', 'month_int'])
 fmls.append(base_fml + ['time_trend', 'yearday'])
+fmls.append(base_fml + ['month_int', 'load_lag1']) 
+fmls.append(base_fml + ['yearday', 'load_lag1']) 
+fmls.append(base_fml + ['time_trend', 'month_int', 'load_lag1'])
+fmls.append(base_fml + ['time_trend', 'yearday', 'load_lag1'])
 
 #%%
-N_TREES = 1000
+#N_TREES = 1000
+N_TREES = 100 # Default value of sklearn
 
 crps_arr = []
 se_arr = []
@@ -257,7 +264,8 @@ for fml in fmls:
         X_test2 = dat_test2[fml]
     
     MTRY_RF = int(len(fml) / 3)
-    print('Mtry BT = p: ', len(fml))
+    print('Number of features p: ', len(fml))
+    print('mtry BT = p: ', len(fml))
     print('mtry RF = p/3 :',  MTRY_RF)
 
     # keep this in the loop so each config gets same seed
@@ -292,6 +300,7 @@ for fml in fmls:
     
     crps_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
                      'day_of_year': 'yes' if 'yearday' in fml else 'no',
+                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
                      'CRPS_RF': crps_rf, 'CRPS_BT': crps_bt})
     
 
@@ -306,6 +315,7 @@ for fml in fmls:
     individual_crps_arr.append({
             'time_trend': 'yes' if 'time_trend' in fml else 'no',
             'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
             'CRPS_RF': individual_crps_rf,#[i],  
             'CRPS_BT': individual_crps_bt,#[i], 
             'date_time': dat_test.index,#[i]    
@@ -318,6 +328,7 @@ for fml in fmls:
 
     se_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
                      'day_of_year': 'yes' if 'yearday' in fml else 'no',
+                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
                      'SE_RF': se_rf, 'SE_BT': se_bt})
     
     
@@ -331,6 +342,7 @@ for fml in fmls:
     individual_se_arr.append({
             'time_trend': 'yes' if 'time_trend' in fml else 'no',
             'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
             'SE_RF': individual_se_rf,
             'SE_BT': individual_se_bt,
             'date_time': dat_test.index,
@@ -345,6 +357,7 @@ for fml in fmls:
 
     mse_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
                      'day_of_year': 'yes' if 'yearday' in fml else 'no',
+                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
                      'MSE_RF': mse_rf, 'MSE_BT': mse_bt})
 
 
@@ -355,6 +368,7 @@ for fml in fmls:
 
     mae_arr.append({'time_trend': 'yes' if 'time_trend' in fml else 'no',
                      'day_of_year': 'yes' if 'yearday' in fml else 'no',
+                     'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
                      'MAE_RF': mae_rf, 'MAE_BT': mae_bt})
 
 #%%
