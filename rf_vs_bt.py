@@ -168,6 +168,42 @@ def save_results(individual_crps_arr, individual_se_arr, dat_test, prefix="res/"
 output_folder = r"/home/siefert/projects/Masterarbeit/sophia_code/python_res"
 os.makedirs(output_folder, exist_ok=True)
 #%%
+output_folder = r"/home/siefert/projects/Masterarbeit/Data/Results/Python_Results/python_res_different_mtry"
+os.makedirs(output_folder, exist_ok=True)
+#%%
+def save_results_different_mtry(individual_crps_arr, individual_se_arr, dat_test, prefix="python_res_different_mtry/"):
+    '''
+    Funktion um die Ergebnisse von sklearn zu speichern
+    
+    Output: CSV-Dateien, die die CRPS- sowie die SE-Werte für jeden Datenpunkt im Testdatensatz enthalten.
+    '''
+    os.makedirs(prefix, exist_ok=True)  # Erstelle das Verzeichnis, falls es nicht existiert
+    
+    for i, result in enumerate(individual_crps_arr):
+        # Dynamischer Dateiname basierend auf den Parametern (time_trend, day_of_year)
+        time_trend_part = 'tt' if result['time_trend'] == 'yes' else 'nott'
+        day_part = 'day' if result['day_of_year'] == 'yes' else 'month'
+        lag_part = 'lagged' if result['load_lag1'] == 'yes' else 'notlagged'
+        mtry_value = f"mtry{result['m_try']}"
+        
+        # Speichern für Random Forest
+        save_name = f"{prefix}sklearn_{time_trend_part}_{day_part}_{lag_part}_{mtry_value}.csv"
+    
+        # Erstelle einen DataFrame für Random Forest
+        df = pd.DataFrame({
+            'date_time': dat_test.index, 
+            'crps': result['CRPS'],  # Individuelle CRPS-Werte für RF
+            'se': se_arr[i]['SE'],    # Individuelle SE-Werte für RF
+        })
+        
+        # Speichern der Ergebnisse als CSV-Datei mit Index
+        df.to_csv(save_name, index=False)  # Index wird mitgespeichert
+      
+        
+        print(f"Saved: {save_name}")
+   
+
+#%%
 winter_time = ['2018-10-28 02:00:00',
                '2019-10-27 02:00:00',
                '2020-10-25 02:00:00',
@@ -205,6 +241,8 @@ fmls.append(base_fml + ['yearday', 'load_lag1'])
 fmls.append(base_fml + ['time_trend', 'month_int', 'load_lag1'])
 fmls.append(base_fml + ['time_trend', 'yearday', 'load_lag1'])
 
+#%%
+# Model with BT und RF and mtry = p and mtry = p/3 ---
 #%%
 #N_TREES = 1000
 N_TREES = 100 # Default value of sklearn
@@ -398,6 +436,184 @@ df_mae
 #%%
 save_results(individual_crps_arr, individual_se_arr ,dat_test ,prefix="res/")
 
+#%%
+# Model without the specification of BT and RF => instead one model and mtry = 1,....p ---
+
+N_TREES = 100 # Default value of sklearn
+
+crps_arr = []
+se_arr = []
+mse_arr = []
+mae_arr = []
+individual_crps_arr = []
+individual_se_arr = []
+
+
+
+df_orig.dropna(inplace=True)
+
+for fml in fmls:
+    print(fml)
+    print(f"Verwendete Formel: {fml}")
+
+    df, _, _ = prep_energy(df=df_orig, **data_encoding)
+    
+    COMBINED_TEST_PERIOD = True
+
+    if COMBINED_TEST_PERIOD:
+        tp_start = "2022-01-01 00:00:00"
+        
+        dat_train = df.set_index("date_time")[:tp_start]
+        dat_test = df.set_index("date_time")[tp_start:]
+        
+        y_train = dat_train['load'].values
+        y_test = dat_test['load'].values
+        
+        dat_train.drop(columns=['load'], inplace=True)
+        dat_test.drop(columns=['load'], inplace=True)
+        
+        X_train = dat_train[fml]
+        X_test = dat_test[fml]
+    else:
+        tp_start1 = "2022-01-01 00:00:00"
+        tp_start2 = "2023-01-01 00:00:00"
+
+        # test_period = 2022
+        dat_train = df.set_index("date_time")[:tp_start1]
+        dat_test1 = df.set_index("date_time")[tp_start1:tp_start2][:-1]
+        dat_test2 = df.set_index("date_time")[tp_start2:]
+
+        y_train = dat_train['load'].values
+        y_test = dat_test1['load'].values
+        y_test2 = dat_test2['load'].values
+
+        dat_train.drop(columns=['load'], inplace=True)
+        dat_test1.drop(columns=['load'], inplace=True)
+        dat_test2.drop(columns=['load'], inplace=True)
+
+        X_train = dat_train[fml]
+        X_test = dat_test1[fml]
+        X_test2 = dat_test2[fml]
+    
+   
+    print('Number of features p: ', len(fml))
+
+    for m_try in range(1, len(fml) + 1):
+        print(f"Training RandomForest with mtry = {m_try}")
+
+        # Setze Hyperparameter für Random Forest
+        hyperparams = {
+            'n_estimators': N_TREES,
+            'random_state': SEED,
+            'n_jobs': -1,
+            'max_features': m_try,
+            'min_samples_split': 2,
+        }
+
+        hyperparams['random_state'] = hyperparams['random_state'] 
+        rf = RandomForestWeight(hyperparams=hyperparams)
+        rf.fit(X_train, y_train)
+
+        _, w_hat = rf.weight_predict(X_test)
+        y_pred = rf.predict(X_test)
+
+        # CRPS ---
+
+        crps = crps_sample(y_test, y_train, w_hat)
+
+        crps_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'CRPS': crps
+        })
+
+        # Individual CRPS ---
+        individual_crps = calculate_individual_crps(y_test, y_train, w_hat)
+        
+        individual_crps_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'CRPS': individual_crps,
+            'date_time': dat_test.index
+        })
+
+         # SE ---
+        se_val = se(y_test, y_pred)
+
+        se_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'SE': se_val
+        })
+
+
+        # Individual SE ---
+        individual_se = calculate_individual_se(y_test, y_pred)
+
+
+        individual_se_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'SE': individual_se,
+            'date_time': dat_test.index
+        })
+
+        # MSE ---
+        mse_val = mse(y_test, y_pred)
+
+        mse_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'MSE': mse_val
+        })
+
+        # MAE ---
+        mae_val = mae(y_test, y_pred)
+
+        mae_arr.append({
+            'm_try': m_try,
+            'time_trend': 'yes' if 'time_trend' in fml else 'no',
+            'day_of_year': 'yes' if 'yearday' in fml else 'no',
+            'load_lag1': 'yes' if 'load_lag1' in fml else 'no',
+            'MAE': mae_val
+        })
+
+#%%
+# CRPS ---
+df_crps = pd.DataFrame(crps_arr)
+df_crps
+#%%
+# Individual CRPS ---
+df_individual_crps = pd.DataFrame(individual_crps_arr)
+df_individual_crps
+#%%
+# Individual SE --
+df_se = pd.DataFrame(se_arr)
+df_se
+#%%
+df_individual_se_arr = pd.DataFrame(individual_se_arr)
+df_individual_se_arr
+#%%
+# MSE ---
+df_mse = pd.DataFrame(mse_arr)
+df_mse
+#%%
+# MAE ---
+df_mae = pd.DataFrame(mae_arr)
+df_mae
+
+#%%
+save_results_different_mtry(individual_crps_arr, individual_se_arr ,dat_test ,prefix="python_res_different_mtry/")
 
 #%%
 # Plot CRPS ---
