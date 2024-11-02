@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import glob
 
 # Pfad zu den CSV-Dateien (alle CSV-Dateien im Ordner "res")
-csv_files_r = glob.glob("/home/siefert/projects/Masterarbeit/sophia_code/R/res_lagged_no_Intercept_Hyperpara_const/*.csv")
+csv_files_r = glob.glob("/home/siefert/projects/Masterarbeit/sophia_code/R/res_lagged_Intercept_Hyperpara_notconst/*.csv")
 csv_files_python = glob.glob("/home/siefert/projects/Masterarbeit/sophia_code/res/*.csv")   
 
 # Deaktiviere LaTeX für matplotlib
@@ -242,25 +242,28 @@ plot_mean_crps('tt_month_lagged_bt')
 plot_mean_crps('tt_month_lagged_rf')
 # %%
 plot_mean_crps('nott_month_notlagged_bt')
-# %%
 
-# Mittels Subplot zusammen alle Plots
+#%%
+
 def plot_mean_crps_subplot(specifications_list):
     """
-    Plot the mean CRPS for each specification in a subplot grid with a shared legend
+    Plot the mean CRPS for each specification in a subplot grid with a shared legend.
 
     Durchschnitts CRPS Werte
     - Konstante Hyperparameter für alle drei Pakete => default werte von sklearn
     - Features (holiday, hour, weekday) und (month/day_of_year, timetrend/no_timetrend, y_{t-1}/no y_{t-1})
     - Für das Paket quantregForest wurde die Konstante entfernt
     """
-    # Definiere die Anzahl der Spezifikationen und lege das Rasterlayout fest
+    
     num_specs = len(specifications_list)
     num_cols = 4  # Anzahl der Spalten im Subplot-Raster
-    num_rows = (num_specs + num_cols - 1) // num_cols  # Berechne die nötige Anzahl der Zeilen
+    num_rows = (num_specs + num_cols - 1) // num_cols  
     
     fig, axes = plt.subplots(num_rows, num_cols, figsize=(4 * num_cols, 4 * num_rows), dpi=300)
     axes = axes.flatten()
+
+    # Gesamttitel hinzufügen
+    fig.suptitle('Mean CRPS (with Intercept in quantregForest and no constant Hyperparameters)', fontsize=16)
 
     # Farb- und Linienstile für die verschiedenen Pakete
     colors = {'ranger': 'b', 'quantregForest': 'g', 'sklearn': 'r'}
@@ -290,32 +293,28 @@ def plot_mean_crps_subplot(specifications_list):
         ax.set_title(f'Mean CRPS for {specifications}', fontsize=10)
         ax.set_ylabel('Mean CRPS')
         ax.grid(True)
-        ax.set_ylim(0, 4200)
+        ax.set_ylim(0, 4500)
         ax.set_xlim(-0.5, 2.5)
-    
-    
-    
+
+    # Gemeinsame Legende erstellen
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[package], markersize=8)
                for package in colors]
     legend_labels = [labels[package] for package in colors]
-    fig.legend(handles, legend_labels, loc='upper center', fontsize=10, ncol=len(colors))
+    
+    # Positioniere die Legende unter dem Gesamttitel
+    fig.legend(handles, legend_labels, loc='upper center', fontsize=10, ncol=len(colors), bbox_to_anchor=(0.5, 0.95))
 
-
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0.4, top = 0.9)  
+    plt.tight_layout(rect=[0, 0, 1, 0.9])  
+    plt.subplots_adjust(wspace=0.4, top=0.85)  
     plt.show()
 
 #%%
 plot_mean_crps_subplot(['nott_day_lagged_bt', 'nott_day_lagged_rf',
     'nott_month_lagged_bt', 'nott_month_lagged_rf',
-
     'tt_day_lagged_bt', 'tt_day_lagged_rf',
     'tt_month_lagged_bt', 'tt_month_lagged_rf',
-
     'nott_day_notlagged_bt', 'nott_day_notlagged_rf',
     'nott_month_notlagged_bt', 'nott_month_notlagged_rf',
-
     'tt_day_notlagged_bt', 'tt_day_notlagged_rf',
     'tt_month_notlagged_bt', 'tt_month_notlagged_rf'])
-
-#%%
+# %%
